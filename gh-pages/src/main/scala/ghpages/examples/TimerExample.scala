@@ -1,15 +1,23 @@
 package ghpages.examples
 
+import cats.effect.{CancelToken, Concurrent, IO}
 import ghpages.GhPagesMacros
-import japgolly.scalajs.react._, vdom.html_<^._
+import ghpages.examples.TimerExample.{ReactFlowProps, stream}
+import japgolly.scalajs.react._
+import vdom.html_<^._
+
 import scala.scalajs.js
 import ghpages.examples.util.SideBySide
+import japgolly.scalajs.react.component.Generic.UnmountedWithRoot
+import japgolly.scalajs.react.vdom.VdomElement
+
+import scala.concurrent.duration._
 
 object TimerExample {
 
   def content = SideBySide.Content(jsSource, source, main())
 
-  lazy val main = addIntro(Timer.withKey(_)(), _(scalaPortOf("A Stateful Component")))
+  lazy val main = addIntro(Timer.withKey(_)(), _ (scalaPortOf("A Stateful Component")))
 
   val jsSource =
     """
@@ -44,40 +52,73 @@ object TimerExample {
 
   val source =
     s"""
-      |${GhPagesMacros.exampleSource}
-      |
-      |Timer().renderIntoDOM(mountNode)
-      |""".stripMargin
+       |${GhPagesMacros.exampleSource}
+       |
+       |Timer().renderIntoDOM(mountNode)
+       |""".stripMargin
 
   // EXAMPLE:START
 
-  case class State(secondsElapsed: Long)
+  type ReactFlowProps[A] = Option[A] => VdomElement
+  type ReactFlowComponent[A] = CtorType.Props[ReactFlowProps[A], UnmountedWithRoot[ReactFlowProps[A], _, _, _]]
 
-  class Backend($: BackendScope[Unit, State]) {
-    var interval: js.UndefOr[js.timers.SetIntervalHandle] =
-      js.undefined
+  def flow[A](stream: fs2.Stream[IO, A], key: js.UndefOr[js.Any] = js.undefined): ReactFlowComponent[A] = {
 
-    def tick =
-      $.modState(s => State(s.secondsElapsed + 1))
+    class Backend($: BackendScope[ReactFlowProps[A], Option[A]]) {
+      var cancelToken: Option[CancelToken[IO]] = None
 
-    def start = Callback {
-      interval = js.timers.setInterval(1000)(tick.runNow())
+      def willMount = Callback {
+        cancelToken = Some(
+          stream.compile.fold(()) { case (_, v) =>
+            $.setState(Some(v)).runNow()
+          }.unsafeRunCancelable(_ => ())
+        )
+      }
+
+      def willUnmount = Callback {
+        cancelToken.foreach(_.unsafeRunAsyncAndForget())
+        cancelToken = None
+      }
+
+      def render(pr: ReactFlowProps[A], v: Option[A]): VdomElement =
+        pr(v)
     }
 
-    def clear = Callback {
-      interval foreach js.timers.clearInterval
-      interval = js.undefined
-    }
-
-    def render(s: State) =
-      <.div("Seconds elapsed: ", s.secondsElapsed)
+    ScalaComponent
+      .builder[ReactFlowProps[A]]("FlowWrapper")
+      .initialState(Option.empty[A])
+      .renderBackend[Backend]
+      .componentWillMount(_.backend.willMount)
+      .componentWillUnmount(_.backend.willUnmount)
+      .shouldComponentUpdatePure(scope => (scope.currentState ne scope.nextState) || (scope.currentProps ne scope.nextProps))
+      .build
+      .withRawProp("key", key)
   }
 
+  //  def topic[F[_]]: Stream[F, Int] =
+  //    Stream.eval(Topic[F, Int](0)).flatMap { topic =>
+  //  }
+
+//  implicit lazy val reactCallbackTimer = new cats.effect.Timer[CallbackTo] {
+//    def clock: cats.effect.Clock[CallbackTo] = ???
+//    def sleep(duration: FiniteDuration): CallbackTo[Unit] = ???
+//  }
+
+  implicit val ioTimer = cats.effect.IO.timer
+
+  val stream: fs2.Stream[IO, Int] =
+    fs2.Stream
+      .iterateEval(0)(v => IO(v + 1))
+      .covary[IO].metered(1 second)
+
   val Timer = ScalaComponent.builder[Unit]("Timer")
-    .initialState(State(0))
-    .renderBackend[Backend]
-    .componentDidMount(_.backend.start)
-    .componentWillUnmount(_.backend.clear)
+    .render{ _ =>
+      <.div("Seconds elapsed: ",
+        flow(stream) { secs =>
+          <.b(s"[${secs}]")
+        }
+      )
+    }
     .build
 
   // EXAMPLE:END

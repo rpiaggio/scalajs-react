@@ -324,7 +324,11 @@ object ScalajsReact {
     .configure(commonSettings, addReactJsDependencies(Compile), preventPublication, hasNoTests)
     .settings(
       crossScalaVersions := Seq(Ver.Scala212),
-      libraryDependencies += "com.github.julien-truffaut" %%% "monocle-macro" % Ver.MonocleScalaz,
+      libraryDependencies ++= Seq(
+        "com.github.julien-truffaut" %%% "monocle-macro" % Ver.MonocleScalaz,
+        "co.fs2" %%% "fs2-core" % "2.0.0",
+        "org.typelevel" %%% "cats-effect" % "2.0.0"
+      ),
       emitSourceMaps := false,
       scalaJSUseMainModuleInitializer := true,
       mainClass in Compile := Some("ghpages.GhPages"),
