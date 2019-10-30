@@ -69,9 +69,8 @@ object TimerExample {
 
       def willMount = Callback {
         cancelToken = Some(
-          stream.compile.fold(()) { case (_, v) =>
-            $.setState(Some(v)).runNow()
-          }.unsafeRunCancelable(_ => ())
+          stream.evalMap(v => IO($.setState(Some(v)).runNow())).compile.drain
+                    .unsafeRunCancelable(_ => ())
         )
       }
 
