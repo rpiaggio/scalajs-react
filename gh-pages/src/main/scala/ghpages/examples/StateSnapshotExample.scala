@@ -14,9 +14,9 @@ object StateSnapshotExample {
   val source = GhPagesMacros.exampleSource
 
   // EXAMPLE:START
-  import monocle.macros._
+//  import monocle.macros._
 
-  @Lenses
+//  @Lenses
   case class Name(firstName: String, surname: String)
 
   val NameChanger = ScalaComponent.builder[StateSnapshot[String]]("Name changer")
@@ -31,11 +31,11 @@ object StateSnapshotExample {
     .initialState(Name("John", "Wick"))
     .render { $ =>
       val name       = $.state
-      val firstNameV = StateSnapshot.zoomL(Name.firstName).of($)
-      val surnameV   = StateSnapshot.zoomL(Name.surname).of($)
+//      val firstNameV = StateSnapshot.zoomL(Name.firstName).of($)
+//      val surnameV   = StateSnapshot.zoomL(Name.surname).of($)
       <.div(
-        <.label("First name:", NameChanger(firstNameV)),
-        <.label("Surname:",    NameChanger(surnameV  )),
+//        <.label("First name:", NameChanger(firstNameV)),
+//        <.label("Surname:",    NameChanger(surnameV  )),
         <.p(s"My name is ${name.surname}, ${name.firstName} ${name.surname}."))
     }
     .build

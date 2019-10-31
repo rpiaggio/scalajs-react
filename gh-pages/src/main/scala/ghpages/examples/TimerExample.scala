@@ -1,8 +1,7 @@
 package ghpages.examples
 
-import cats.effect.{CancelToken, Concurrent, IO}
+import cats.effect.IO
 import ghpages.GhPagesMacros
-import ghpages.examples.TimerExample.{ReactFlowProps, stream}
 import japgolly.scalajs.react._
 import vdom.html_<^._
 
@@ -59,74 +58,6 @@ object TimerExample {
 
   // EXAMPLE:START
 
-  import fs2.concurrent._
-
-  //  val topic = new Topic[] {}
-
-
-  type ReactFlowProps[A] = Option[A] => VdomElement
-  type ReactFlowComponent[A] = CtorType.Props[ReactFlowProps[A], UnmountedWithRoot[ReactFlowProps[A], _, _, _]]
-
-  import cats.effect._
-  import cats.implicits._
-  import scala.concurrent.ExecutionContext.Implicits.global
-
-  implicit val ioTimer = IO.timer
-  implicit val ioCS: ContextShift[IO] = IO.contextShift(global)
-  //  implicit val ce: ConcurrentEffect[IO] = IO.ioConcurrentEffect
-
-  def stream[F[_] : Sync : Timer]: fs2.Stream[F, Int] =
-    fs2.Stream
-      .iterateEval(0)(v => Sync[F].delay(v + 1))
-      .covary[F].metered(1 second)
-
-  val ioStream = stream[IO]
-
-  def flow[ /*F[_] : Sync,*/ A](stream: fs2.Stream[IO, A], key: js.UndefOr[js.Any] = js.undefined): ReactFlowComponent[A] = {
-
-    class Backend($: BackendScope[ReactFlowProps[A], Option[A]]) {
-
-      val done = SignallingRef[IO, Boolean](false).unsafeRunSync()
-
-      def willMount = Callback {
-        stream
-          .interruptWhen(done)
-          .evalMap(v => Sync[IO].delay($.setState(Some(v)).runNow()))
-          .compile.drain
-          .unsafeRunAsyncAndForget()
-      }
-
-      def willUnmount = Callback {
-        done.set(true).unsafeRunSync()
-      }
-
-      def render(pr: ReactFlowProps[A], v: Option[A]): VdomElement =
-        <.div(
-          pr(v),
-          <.button(^.tpe := "button", "STOP!", ^.onClick --> willUnmount)
-        )
-    }
-
-    ScalaComponent
-      .builder[ReactFlowProps[A]]("FlowWrapper")
-      .initialState(Option.empty[A])
-      .renderBackend[Backend]
-      .componentWillMount(_.backend.willMount)
-      .componentWillUnmount(_.backend.willUnmount)
-      .shouldComponentUpdatePure(scope => (scope.currentState ne scope.nextState) || (scope.currentProps ne scope.nextProps))
-      .build
-      .withRawProp("key", key)
-  }
-
-  //  def topic[F[_]]: Stream[F, Int] =
-  //    Stream.eval(Topic[F, Int](0)).flatMap { topic =>
-  //  }
-
-//  implicit lazy val reactCallbackTimer = new cats.effect.Timer[CallbackTo] {
-//    def clock: cats.effect.Clock[CallbackTo] = ???
-//    def sleep(duration: FiniteDuration): CallbackTo[Unit] = ???
-//  }
-
   implicit val ioTimer = cats.effect.IO.timer
 
   val stream: fs2.Stream[IO, Int] =
@@ -134,10 +65,12 @@ object TimerExample {
       .iterateEval(0)(v => IO(v + 1))
       .covary[IO].metered(1 second)
 
+  import com.rpiaggio.crystal.Flow
+
   val Timer = ScalaComponent.builder[Unit]("Timer")
     .render{ _ =>
-      <.div("Seconds elapsed: ",
-        flow(stream) { secs =>
+      <.div("Seconds elapsed 222: ",
+        Flow.flow(stream) { secs =>
           <.b(s"[${secs}]")
         }
       )

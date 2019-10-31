@@ -327,6 +327,7 @@ object ScalajsReact {
       libraryDependencies ++= Seq(
         "com.github.julien-truffaut" %%% "monocle-macro" % Ver.MonocleScalaz,
         "co.fs2" %%% "fs2-core" % "2.0.0",
+        "com.rpiaggio" %%% "crystal" % "0.0.2-SNAPSHOT",
         "org.typelevel" %%% "cats-effect" % "2.0.0"
       ),
       emitSourceMaps := false,
