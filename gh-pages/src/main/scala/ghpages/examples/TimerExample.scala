@@ -59,28 +59,52 @@ object TimerExample {
 
   // EXAMPLE:START
 
+  import fs2.concurrent._
+
+  //  val topic = new Topic[] {}
+
+
   type ReactFlowProps[A] = Option[A] => VdomElement
   type ReactFlowComponent[A] = CtorType.Props[ReactFlowProps[A], UnmountedWithRoot[ReactFlowProps[A], _, _, _]]
 
-  def flow[A](stream: fs2.Stream[IO, A], key: js.UndefOr[js.Any] = js.undefined): ReactFlowComponent[A] = {
+  import cats.effect._
+  import cats.implicits._
+  import scala.concurrent.ExecutionContext.Implicits.global
+
+  implicit val ioTimer = IO.timer
+  implicit val ioCS: ContextShift[IO] = IO.contextShift(global)
+  //  implicit val ce: ConcurrentEffect[IO] = IO.ioConcurrentEffect
+
+  def stream[F[_] : Sync : Timer]: fs2.Stream[F, Int] =
+    fs2.Stream
+      .iterateEval(0)(v => Sync[F].delay(v + 1))
+      .covary[F].metered(1 second)
+
+  val ioStream = stream[IO]
+
+  def flow[ /*F[_] : Sync,*/ A](stream: fs2.Stream[IO, A], key: js.UndefOr[js.Any] = js.undefined): ReactFlowComponent[A] = {
 
     class Backend($: BackendScope[ReactFlowProps[A], Option[A]]) {
-      var cancelToken: Option[CancelToken[IO]] = None
+
+      val done = SignallingRef[IO, Boolean](false).unsafeRunSync()
 
       def willMount = Callback {
-        cancelToken = Some(
-          stream.evalMap(v => IO($.setState(Some(v)).runNow())).compile.drain
-                    .unsafeRunCancelable(_ => ())
-        )
+        stream
+          .interruptWhen(done)
+          .evalMap(v => Sync[IO].delay($.setState(Some(v)).runNow()))
+          .compile.drain
+          .unsafeRunAsyncAndForget()
       }
 
       def willUnmount = Callback {
-        cancelToken.foreach(_.unsafeRunAsyncAndForget())
-        cancelToken = None
+        done.set(true).unsafeRunSync()
       }
 
       def render(pr: ReactFlowProps[A], v: Option[A]): VdomElement =
-        pr(v)
+        <.div(
+          pr(v),
+          <.button(^.tpe := "button", "STOP!", ^.onClick --> willUnmount)
+        )
     }
 
     ScalaComponent
