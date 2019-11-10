@@ -1,6 +1,6 @@
 package ghpages.examples
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import ghpages.GhPagesMacros
 import japgolly.scalajs.react._
 import vdom.html_<^._
@@ -10,6 +10,7 @@ import ghpages.examples.util.SideBySide
 import japgolly.scalajs.react.component.Generic.UnmountedWithRoot
 import japgolly.scalajs.react.vdom.VdomElement
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 object TimerExample {
@@ -59,6 +60,8 @@ object TimerExample {
   // EXAMPLE:START
 
   implicit val ioTimer = cats.effect.IO.timer
+  implicit val ioCS: ContextShift[IO] = IO.contextShift(global)
+//  implicit val ioCE = cats.effect.ConcurrentEffect
 
   val stream: fs2.Stream[IO, Int] =
     fs2.Stream
@@ -67,11 +70,16 @@ object TimerExample {
 
   import com.rpiaggio.crystal.Flow
 
+  val Seconds = Flow.flow(stream)
+
   val Timer = ScalaComponent.builder[Unit]("Timer")
     .render{ _ =>
-      <.div("Seconds elapsed 222: ",
-        Flow.flow(stream) { secs =>
-          <.b(s"[${secs}]")
+      <.div("Seconds elapsed Crystal: ",
+        Seconds { secs =>
+          <.b(s"1: [${secs}]")
+        },
+        Seconds { secs =>
+          <.b(s"2: [${secs}]")
         }
       )
     }

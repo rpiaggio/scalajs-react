@@ -74,8 +74,9 @@ object TodoExample {
   import com.rpiaggio.crystal.Flow
   import scala.concurrent.ExecutionContext.Implicits.global
 
+  implicit val ioTimer = cats.effect.IO.timer
   implicit val ioCS: ContextShift[IO] = IO.contextShift(global)
-  implicit val ceIO: ConcurrentEffect[IO] = IO.ioConcurrentEffect
+  //  implicit val ioCE = cats.effect.ConcurrentEffect
 
   case class Model(items: SignallingRef[IO, List[String]] = SignallingRef[IO, List[String]](List.empty).unsafeRunSync())
 
@@ -102,10 +103,12 @@ object TodoExample {
         }
     //      $.modState(s => State(s.items :+ s.text, ""))
 
+    val ItemList = Flow.flow(model.items.discrete)
+
     def render(model: Model, state: State) =
       <.div(
         <.h3("TODO"),
-        Flow.flow(model.items.discrete) { list =>
+        ItemList { list =>
           TodoList(list.getOrElse(List.empty))
           //          TodoList(model.items.get.unsafeRunSync())
         },
